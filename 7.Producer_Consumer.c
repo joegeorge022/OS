@@ -1,64 +1,45 @@
 #include <stdio.h>
-#include <pthread.h>
-#include <semaphore.h>
-#include <unistd.h>
 
-sem_t wrt, mutex;
 int readcount = 0;
+int writer_waiting = 0;
+int writing = 0;
 
-void *reader(void *arg) {
-    int id = *(int *)arg;
+// Reader
+void reader(int id) {
+    if (writer_waiting || writing) {
+        printf("Reader %d is waiting (writer priority)\n", id);
+        return;
+    }
 
-    sem_wait(&mutex);
     readcount++;
-    if (readcount == 1)
-        sem_wait(&wrt);   // block writers
-    sem_post(&mutex);
-
     printf("Reader %d is reading\n", id);
-    sleep(1);
 
-    sem_wait(&mutex);
     readcount--;
-    if (readcount == 0)
-        sem_post(&wrt);   // allow writers
-    sem_post(&mutex);
 }
 
-void *writer(void *arg) {
-    int id = *(int *)arg;
+// Writer
+void writer(int id) {
+    writer_waiting = 1;
 
-    sem_wait(&wrt);   // writer gets priority
+    if (readcount > 0 || writing) {
+        printf("Writer %d is waiting\n", id);
+    }
+
+    writer_waiting = 0;
+    writing = 1;
+
     printf("Writer %d is writing\n", id);
-    sleep(1);
-    sem_post(&wrt);
+
+    writing = 0;
 }
 
 int main() {
-    pthread_t r[3], w[2];
-    int i, id[5];
-
-    sem_init(&mutex, 0, 1);
-    sem_init(&wrt, 0, 1);
-
-    // create readers
-    for(i = 0; i < 3; i++) {
-        id[i] = i+1;
-        pthread_create(&r[i], NULL, reader, &id[i]);
-    }
-
-    // create writers
-    for(i = 0; i < 2; i++) {
-        id[i] = i+1;
-        pthread_create(&w[i], NULL, writer, &id[i]);
-    }
-
-    // join threads
-    for(i = 0; i < 3; i++)
-        pthread_join(r[i], NULL);
-
-    for(i = 0; i < 2; i++)
-        pthread_join(w[i], NULL);
+    // Simulation order
+    reader(1);
+    reader(2);
+    writer(1);
+    reader(3);
+    writer(2);
 
     return 0;
 }
